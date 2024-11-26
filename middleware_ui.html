@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>GoL Middleware UI</title>
+    <link rel="icon" href="data:,">
+    <style>
+#myurl { border: thin dotted black; padding: 3px; border-radius:5px; font-size:1.5rem; background: rgba(255,255,255,0); color: #000; }
+    canvas {
+      image-rendering: pixelated;
+      width: calc(100% - 1ex);
+      max-height: calc(100vh - 10em);
+      border: 0.5ex solid #777;
+      object-fit: contain;
+      background: #777;
+    }
+    </style>
+    <script>
+var ivl = undefined;
+var canvas = undefined;
+var ctx = undefined;
+var w = 0, h = 0; // size of one tile in cells
+var bw = 0, bh = 0; // size of board in tiles
+
+function charToColor(cp) {
+  if ('number' != typeof cp) cp = cp.codePointAt(0);
+  if (cp == 0x23) cp = 0; // octothorpe
+  if (cp == 0x20) return [255,255,255]; // space
+  if (cp == 0x22) return [0xbb, 0xbb, 0xbb]; // quote
+  if (cp >= 0x30 && cp < 0x70) { // color
+    cp -= 0x30;
+    return [((cp>>4)&3)*0x55, ((cp>>2)&3)*0x44, ((cp>>0)&3)*0x55];
+  }
+  return [255,255,0]; // error
+}
+
+function drawTile(s, tx, ty) {
+  if (w == 0 || h == 0) return
+  let id = new ImageData(w+1,h)
+  for(let i=0; i<s.length; i+=1) {
+    let cp = s.codePointAt(i);
+    let [r,g,b] = charToColor(cp);
+    id.data[4*i] = r;
+    id.data[4*i+1] = g;
+    id.data[4*i+2] = b;
+    id.data[4*i+3] = 255;
+  }
+  ctx.putImageData(id, tx*w,ty*h, 0,0,w,h)
+}
+
+
+
+function doPing() {
+  fetch('/ping')
+    .then(res => res.json())
+    .then(j => {
+      console.log(j)
+
+      // list of servers
+      let ol = document.getElementById('serverlist')
+      while (ol.lastElementChild) ol.lastElementChild.remove()
+      j.servers.forEach(s => {
+        let li = document.createElement('li')
+        li.append(s)
+        for(let t in j.config) if (j.config[t] == s) {
+          li.append(' (')
+          li.append(t)
+          li.append(')')
+        }
+        ol.append(li)
+      })
+      
+      // resize the board
+      if (j.dimensions != [w,h,bw,bh]) {
+        window.w = j.dimensions[0]
+        window.h = j.dimensions[1]
+        window.bw = j.dimensions[2]
+        window.bh = j.dimensions[3]
+        window.canvas.width = w*bw
+        window.canvas.height = h*bh
+        window.ctx = window.canvas.getContext('2d')
+      }
+      
+      // draw the board
+      for(let tidx in j.tiles) {
+        let [x,y] = tidx.split(',').map(Number)
+        drawTile(j.tiles[tidx], x, y)
+      }
+      
+      // enable/disable inputs based on ping results
+      if (j.delay > 0) { // running
+        document.querySelectorAll('#setup input').forEach(e => e.disabled = true)
+        document.querySelectorAll('#control input').forEach(e => e.disabled = false)
+        if (!document.getElementById('delay').value) document.getElementById('delay').value = j.delay
+      } else if (j.dimensions[0] > 0) { // paused
+        document.querySelectorAll('#setup input').forEach(e => e.disabled = true)
+        document.querySelectorAll('#control input').forEach(e => e.disabled = false)
+        document.getElementById('pauser').disabled = true
+        // document.getElementById('delay').value = 0
+      } else { // not configured
+        document.querySelectorAll('#setup input').forEach(e => e.disabled = false)
+        document.querySelectorAll('#control input').forEach(e => e.disabled = true)
+      }
+    })
+}
+
+function button_handler(element) {
+  if (element.id == 'pauser') {
+    fetch('/pause')
+    document.getElementById('delay').value = 0
+    element.disabled = true
+  } else if (element.id == 'stopper') {
+    fetch('/stop')
+    document.querySelectorAll('#control input').forEach(e => e.disabled = true)
+    document.getElementById('delay').value = ''
+  } else if (element.id == 'configurer') {
+    fetch("/config", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        tile_width: Number(document.getElementById('tw').value),
+        tile_height: Number(document.getElementById('th').value),
+        board_width: Number(document.getElementById('bw').value),
+        board_height: Number(document.getElementById('bh').value),
+      }),
+    })
+    document.querySelectorAll('#setup input').forEach(e => e.disabled = true)
+  }
+}
+
+function delay_handler(element) {
+  let delay = Number(element.value)
+  if (delay > 0) {
+    fetch('/speed', {method:'POST', body:String(delay)})
+    clearInterval(window.ivl)
+    window.ivl = setInterval(doPing, Math.min(1000, Math.max(1000*delay,0.01)))
+  } else {
+    if (element.value) element.value = ''
+    clearInterval(window.ivl)
+    window.ivl = setInterval(doPing, 1000)
+  }
+}
+
+window.addEventListener('load',evt => {
+  document.getElementById('myurl').value = String(location).replace(/\/$/, '')+'/addTS'
+  window.canvas = document.querySelector('canvas')
+  window.ivl = setInterval(doPing, 1000)
+})
+window.addEventListener('blur',evt => {
+  if (window.ivl) clearInterval(window.ivl)
+  window.ivl = undefined
+})
+window.addEventListener('focus',evt => {
+  if (!window.ivl)
+    window.ivl = setInterval(doPing, 1000)
+})
+    </script>
+  </head>
+  <body>
+<canvas></canvas>
+<p>Register GoL tile servers with URL <input disabled id="myurl" size="25"></p>
+<div id="controls">
+  <p id="setup">Board setup:
+    <input type="number" min="1" step="1" id="tw" value="10" size="4">×<input type="number" min="1" step="1" id="th" value="10" size="4"> cell tiles, with 
+    <input type="number" min="1" step="1" id="bw" value="1" size="4">×<input type="number" min="1" step="1" id="bh" value="1" size="4"> tiles on the board.
+    <input type="button" value="Configure board" id="configurer" onclick="button_handler(this)">
+  </p>
+  <p id="control">Simulation control:
+    <input type="button" value="Stop (disconnect all servers)" id="stopper" onclick="button_handler(this)" disabled>
+    <input type="button" value="Pause (return to User Edit mode)" id="pauser" onclick="button_handler(this)" disabled>
+    <label>Seconds between ticks: <input type="number" min="0.01" step="0.1" id="delay" onchange="delay_handler(this)" disabled></label>
+  </p>
+</div>
+<div id="registered"><p>Registered servers:</p><ol id="serverlist"></ol></div>
+  </body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Single GoL Tile UI</title>
+    <link rel="icon" href="data:,">
+    <style>
+    input { font-size: 1rem; }
+#myurl, #mystate { border: thin dotted black; padding: 3px; border-radius:5px; font-size:1.5rem; background: rgba(255,255,255,0); color: #000; }
+    .ifwait, .iflive, .ifedit { display: none; }
+    .Waiting .ifwait { display: inherit; }
+    .User-Edit .iflive, .Simulating .iflive { display: inherit; }
+    .User-Edit .ifedit { display: inherit; }
+    #tile { border: thin solid black; display: none; margin: auto; }
+    canvas {
+      image-rendering: pixelated;
+      width: 50%;
+      border: thick solid #777;
+    }
+    .cbox { width: 1em; height: 1em; display: inline-block; padding:1ex; text-align:center; color:#FFF; font-size:150%; }
+    </style>
+    <script>
+
+function doPing() {
+  fetch('/ping')
+    .then(res => res.json())
+    .then(j => {
+      document.getElementById('mystate').innerHTML = j.state
+      document.getElementById('statepanel').setAttribute('class', j.state.replace(/[^a-zA-Z]/g, '-'))
+      if (j.tile) {
+        // document.getElementById('tile').textContent = j.tile.replace(/ /g, ' ')
+        let rows = j.tile.split('\n')
+        window.w = rows[0].length
+        window.h = rows.length - 1
+        if (canvas.width != w || canvas.height != h) {
+          window.canvas.width = w
+          window.canvas.height = h
+          window.ctx = window.canvas.getContext('2d')
+        }
+        drawTile(j.tile)
+      }
+    })
+}
+function inform() {
+  let inp = document.getElementById('middleware')
+  let mwurl = inp.value
+  console.info("sending",mwurl,"to /inform by POST")
+  fetch("/inform", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({url:mwurl}),
+  }).then(res=>{
+      if (!res.ok) throw Error("HTTP status code "+res.status)
+      return res.text()
+    })
+    .then(txt=>{
+      alert("PUT /inform "+JSON.stringify(mwurl)+"\n\n"+txt)
+    })
+    .catch(ex => {
+      alert("ERROR with /inform "+JSON.stringify(mwurl)+"\n\n"+ex)
+    })
+}
+
+function pixelOf(event) {
+  let pw = canvas.width, ph = canvas.height;
+  let sw = canvas.clientWidth, sh = canvas.clientHeight;
+  let box = canvas.getBoundingClientRect()
+  let x0 = box.left + canvas.clientLeft, y0 = box.top + canvas.clientTop;
+  let vw = sw, vh = sh;
+  if (pw*sh > ph*sw) {
+    vh = sw*ph/pw
+    y0 += (sh-vh)/2
+  } else {
+    vw = sh*pw/ph
+    x0 += (sw-vw)/2
+  }
+  let pixel = [Math.floor((event.x - x0)*pw/vw), Math.floor((event.y - y0)*ph/vh)];
+  return pixel
+}
+
+function charToColor(cp) {
+  if ('number' != typeof cp) cp = cp.codePointAt(0);
+  if (cp == 0x23) cp = 0; // octothorpe
+  if (cp == 0x20) return [255,255,255]; // space
+  if (cp == 0x22) return [0xbb, 0xbb, 0xbb]; // quote
+  if (cp >= 0x30 && cp < 0x70) { // color
+    cp -= 0x30;
+    return [((cp>>4)&3)*0x55, ((cp>>2)&3)*0x44, ((cp>>0)&3)*0x55];
+  }
+  return [255,255,0]; // error
+}
+
+function drawTile(s) {
+  let id = new ImageData(w+1,h)
+  for(let i=0; i<s.length; i+=1) {
+    let cp = s.codePointAt(i);
+    let [r,g,b] = charToColor(cp);
+    id.data[4*i] = r;
+    id.data[4*i+1] = g;
+    id.data[4*i+2] = b;
+    id.data[4*i+3] = 255;
+  }
+  ctx.putImageData(id, 0,0, 0,0,w,h)
+}
+
+window.penColor = '#'
+function palette(event) {
+  window.penColor = event.target.textContent.replace(' ',' ')
+  let [r,g,b] = charToColor(penColor)
+  document.getElementById('mypen').style.backgroundColor = `rgb(${r},${g},${b})`
+}
+
+function userEdit(event) {
+  if (document.getElementById('mystate').textContent != 'User Edit') return
+  let [cx,cy] = pixelOf(event)
+  fetch('/change/'+cx+'/'+cy+'/'+encodeURIComponent(penColor)+'/')
+    .then(res=>res.text())
+    .then(txt => drawTile(txt))
+}
+
+window.addEventListener('load',evt => {
+  document.getElementById('myurl').value = String(location).replace(/\/$/, '')
+  window.canvas = document.querySelector('canvas')
+  canvas.addEventListener('click', userEdit)
+  window.ivl = setInterval(doPing, 1000)
+  document.querySelectorAll('.ifedit .cbox').forEach(e => e.addEventListener('click',palette))
+})
+window.addEventListener('blur',evt => {
+  if (window.ivl) clearInterval(window.ivl)
+  window.ivl = undefined
+})
+window.addEventListener('focus',evt => {
+  if (!window.ivl)
+    window.ivl = setInterval(doPing, 1000)
+})
+    </script>
+  </head>
+  <body>
+<p>This GoL tile server is running as <input disabled id="myurl" size="25"></p>
+<p>Current state <code id="mystate"></code></p>
+<div id="statepanel">
+  <div class="ifwait"><label>Middleware URL: <input id="middleware" size="25"></label><input type="button" value="Inform middleware this tile server exists" onclick="inform()"></div>
+  <div class="iflive">
+      <p>Your tile:</p><!-- <pre id="tile"></pre>-->
+      <canvas></canvas>
+  </div>
+  <div class="ifedit" style="background:#999; padding: 1ex;">
+      <p>Current drawing color: <span id="mypen" style="display: inline-block; width: 2em; height: 2em; background-color: #000"> </span></p>
+      Pick a drawing color: <div class="cbox" style="background-color:#FFF; color:#000">&nbsp;</div><div class="cbox" style="background-color:#000">&#48;</div><div class="cbox" style="background-color:#005">&#49;</div><div class="cbox" style="background-color:#00a">&#50;</div><div class="cbox" style="background-color:#00f">&#51;</div><div class="cbox" style="background-color:#040">&#52;</div><div class="cbox" style="background-color:#045">&#53;</div><div class="cbox" style="background-color:#04a">&#54;</div><div class="cbox" style="background-color:#04f">&#55;</div><div class="cbox" style="background-color:#080">&#56;</div><div class="cbox" style="background-color:#085">&#57;</div><div class="cbox" style="background-color:#08a">&#58;</div><div class="cbox" style="background-color:#08f">&#59;</div><div class="cbox" style="background-color:#0c0; color:#000">&#60;</div><div class="cbox" style="background-color:#0c5; color:#000">&#61;</div><div class="cbox" style="background-color:#0ca; color:#000">&#62;</div><div class="cbox" style="background-color:#0cf; color:#000">&#63;</div><div class="cbox" style="background-color:#500">&#64;</div><div class="cbox" style="background-color:#505">&#65;</div><div class="cbox" style="background-color:#50a">&#66;</div><div class="cbox" style="background-color:#50f">&#67;</div><div class="cbox" style="background-color:#540">&#68;</div><div class="cbox" style="background-color:#545">&#69;</div><div class="cbox" style="background-color:#54a">&#70;</div><div class="cbox" style="background-color:#54f">&#71;</div><div class="cbox" style="background-color:#580">&#72;</div><div class="cbox" style="background-color:#585">&#73;</div><div class="cbox" style="background-color:#58a">&#74;</div><div class="cbox" style="background-color:#58f">&#75;</div><div class="cbox" style="background-color:#5c0; color:#000">&#76;</div><div class="cbox" style="background-color:#5c5; color:#000">&#77;</div><div class="cbox" style="background-color:#5ca; color:#000">&#78;</div><div class="cbox" style="background-color:#5cf; color:#000">&#79;</div><div class="cbox" style="background-color:#a00">&#80;</div><div class="cbox" style="background-color:#a05">&#81;</div><div class="cbox" style="background-color:#a0a">&#82;</div><div class="cbox" style="background-color:#a0f">&#83;</div><div class="cbox" style="background-color:#a40">&#84;</div><div class="cbox" style="background-color:#a45">&#85;</div><div class="cbox" style="background-color:#a4a">&#86;</div><div class="cbox" style="background-color:#a4f">&#87;</div><div class="cbox" style="background-color:#a80; color:#000">&#88;</div><div class="cbox" style="background-color:#a85; color:#000">&#89;</div><div class="cbox" style="background-color:#a8a; color:#000">&#90;</div><div class="cbox" style="background-color:#a8f; color:#000">&#91;</div><div class="cbox" style="background-color:#ac0; color:#000">&#92;</div><div class="cbox" style="background-color:#ac5; color:#000">&#93;</div><div class="cbox" style="background-color:#aca; color:#000">&#94;</div><div class="cbox" style="background-color:#acf; color:#000">&#95;</div><div class="cbox" style="background-color:#f00">&#96;</div><div class="cbox" style="background-color:#f05">&#97;</div><div class="cbox" style="background-color:#f0a">&#98;</div><div class="cbox" style="background-color:#f0f">&#99;</div><div class="cbox" style="background-color:#f40">&#100;</div><div class="cbox" style="background-color:#f45">&#101;</div><div class="cbox" style="background-color:#f4a">&#102;</div><div class="cbox" style="background-color:#f4f">&#103;</div><div class="cbox" style="background-color:#f80; color:#000">&#104;</div><div class="cbox" style="background-color:#f85; color:#000">&#105;</div><div class="cbox" style="background-color:#f8a; color:#000">&#106;</div><div class="cbox" style="background-color:#f8f; color:#000">&#107;</div><div class="cbox" style="background-color:#fc0; color:#000">&#108;</div><div class="cbox" style="background-color:#fc5; color:#000">&#109;</div><div class="cbox" style="background-color:#fca; color:#000">&#110;</div><div class="cbox" style="background-color:#fcf; color:#000">&#111;</div>
+      <span style="background:#ff0; padding: 1ex;"><em>error</em></span>
+  </div>
+</div>
+  </body>
+</html>
