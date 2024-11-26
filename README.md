@@ -1,43 +1,43 @@
-Conway's Game of Life
-Conway's Game of Life is a cellular automaton devised by mathematician John Conway. It is a zero-player game, meaning that its evolution is determined by its initial state, with no further input from humans. The game is played on a grid of cells, where each cell can either be alive or dead, and the state of each cell evolves based on a few simple rules.
+# Conway's Game of Life
 
-Rules of the Game
-Any live cell with fewer than two live neighbors dies (underpopulation).
-Any live cell with two or three live neighbors lives on to the next generation (survival).
-Any live cell with more than three live neighbors dies (overpopulation).
-Any dead cell with exactly three live neighbors becomes a live cell (reproduction).
-Features
-Visual representation of the Game of Life grid.
-Ability to start, pause, and reset the simulation.
-Adjustable speed for the simulation.
-Interactive grid where users can manually set initial live cells.
-Installation
-To run the project locally:
+Conway's Game of Life is a cellular automaton devised by mathematician John Conway. It is a zero-player game where the evolution of the game is determined by its initial state, requiring no further input. The game consists of a grid of cells, each of which is either alive or dead. The state of the grid evolves in discrete steps according to a set of rules based on the number of live neighbors each cell has.
 
-Clone the repository:
-bash
-Copy code
-git clone https://github.com/abbasmirza10/game-of-life.git
-Navigate to the project directory:
-bash
-Copy code
-cd game-of-life
-Install the necessary dependencies:
-bash
-Copy code
-pip install -r requirements.txt
-Run the Game of Life:
-bash
-Copy code
-python life_game.py
-Usage
-Start: Begin the simulation.
-Pause: Pause the simulation.
-Reset: Reset the grid to its initial state.
-Grid: Click on cells to toggle between alive or dead.
-Contributing
-Feel free to fork the repository and submit pull requests with improvements or bug fixes.
+## Features
 
-License
-This project is licensed under the MIT License.
+- **Simulates Conway's Game of Life** with customizable grid size and initial configuration.
+- **Cellular automation**: The grid evolves based on its initial state and defined rules.
+- **Interactive controls** to start, stop, and reset the simulation.
+- **Visualization**: Graphical representation of the game's grid.
 
+## Getting Started
+
+To clone and run this project locally, follow these steps:
+
+1. Clone the repository using the following command:
+
+    ```bash
+    git clone https://github.com/abbasmirza10/game-of-life.git
+    ```
+
+2. Navigate into the project directory:
+
+    ```bash
+    cd game-of-life
+    ```
+
+3. Install dependencies if applicable:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+4. Run the simulation:
+
+    ```bash
+    python main.py
+    ```
+
+## Usage
+
+- Use the buttons to **start**, **pause**, or **reset** the game.
+- The game runs in a grid of cells, with each cell evolving based on its neighbors according to Conway
